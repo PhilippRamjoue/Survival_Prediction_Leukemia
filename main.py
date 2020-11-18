@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import copy
+from sklearn.preprocessing import MinMaxScaler
 
 
 #  donor_age - Age of the donor at the time of hematopoietic stem cells apheresis
@@ -74,122 +74,155 @@ def clean_data(org_dataset):
 
     dataset = copy.deepcopy(org_dataset)
 
-    columns_for_dummies = ['donor_ABO', 'recipient_age_int', 'recipient_ABO', 'disease', 'disease_group',
-                           'HLA_match', 'HLA_group_1']
+    columns_for_dropping = ['extensive_chronic_GvHD']
 
+    # 1. Column 'extensive_chronic_GvHD' can be dropped because there are 31 of 187 values are missing
+    dataset.drop(columns_for_dropping, inplace=True, axis=1)
 
-    columns_for_dropping = ['time_to_acute_GvHD_III_IV']
+    # 2. replace all ? in this column with 0.0
+    # ? are used if the related conditions (PLT_recovery, ANC_recovery and acute_GvHD_III_IV) are 'no' so there is
+    # no time passed until the event. In this cases the value 0.0 is also suitable instead of the ?
+    dataset['time_to_PLT_recovery'] = dataset.time_to_PLT_recovery.apply(lambda s: '0.0' if s == "?" else s)
 
-    # strong corrolation between missing CMV_status and recipient_CMV
+    dataset['time_to_ANC_recovery'] = dataset.time_to_ANC_recovery.apply(lambda s: '0.0' if s == "?" else s)
+
+    dataset['time_to_acute_GvHD_III_IV'] = dataset.time_to_acute_GvHD_III_IV.apply(lambda s: '0.0' if s == "?" else s)
 
     tmp_list = []
     for i in range(len(dataset)):
         tmp_counter = 0
         for col in dataset:
-            tmp = dataset.at[i,col]
             if dataset.at[i,col] == '?':
                 dataset.at[i, col] = np.NaN
                 tmp_counter = tmp_counter + 1
         tmp_list.append(tmp_counter)
 
+    shape_org = dataset.shape
+
+    dataset.dropna(axis=0,inplace=True)
+    dataset.reset_index(drop=True, inplace=True)
+
+    shape_row_drop = dataset.shape
+    row_drop_loss = 100 - ((shape_row_drop[0] / shape_org[0]) * 100)
+
+    print("Shape of original frame: %s" % str(shape_org))
+    print("Shape of frame with dropped nan rows: %s; Loss: %d %%" % (str(shape_row_drop), row_drop_loss))
+
+    # Convert categorical categories to numbers
+
+    # 'donor_age_below_35', #yes/no
+    dataset['donor_age_below_35'] = dataset.donor_age_below_35.apply(lambda s: 1 if s == "yes" else 0)
+
+    # 'donor_CMV', #present/absent
+    dataset['donor_CMV'] = dataset.donor_CMV.apply(
+        lambda s: 1 if s == "present" else 0)
+
+    # 'recipient_age_below_10', #yes/no
+    dataset['recipient_age_below_10'] = dataset.recipient_age_below_10.apply(
+        lambda s: 1 if s == "yes" else 0)
+
+    # 'recipient_gender', #male/female
+    dataset['recipient_gender'] = dataset.recipient_gender.apply(
+        lambda s: 1 if s == "male" else 0)
+
+    # 'recipient_rh',  #plus/minus
+    dataset['recipient_rh'] = dataset.recipient_rh.apply(
+        lambda s: 1 if s == "plus" else 0)
+
+    # 'recipient_CMV', #present/absent
+    dataset['recipient_CMV'] = dataset.recipient_CMV.apply(
+        lambda s: 1 if s == "present" else 0)
+
+    # 'gender_match', #female_to_male/other
+    dataset['gender_match'] = dataset.gender_match.apply(
+        lambda s: 1 if s == "female_to_male" else 0)
+
+    # 'ABO_match', #matched/mismatched
+    dataset['ABO_match'] = dataset.ABO_match.apply(
+        lambda s: 1 if s == "matched" else 0)
+
+    # 'HLA_mismatch', #matched/mismatched
+    dataset['HLA_mismatch'] = dataset.HLA_mismatch.apply(
+        lambda s: 1 if s == "matched" else 0)
+
+    # 'risk_group', #high/low
+    dataset['risk_group'] = dataset.risk_group.apply(
+        lambda s: 1 if s == "high" else 0)
+
+    # 'stem_cell_source', #peripheral_blood/bone_marrow
+    dataset['stem_cell_source'] = dataset.stem_cell_source.apply(
+        lambda s: 1 if s == "bone_marrow" else 0)
+
+    # 'tx_post_relapse', #yes/no
+    dataset['tx_post_relapse'] = dataset.tx_post_relapse.apply(
+        lambda s: 1 if s == "yes" else 0)
+
+    # 'ANC_recovery', #yes/no
+    dataset['ANC_recovery'] = dataset.ANC_recovery.apply(
+        lambda s: 1 if s == "yes" else 0)
+
+    # 'PLT_recovery', #yes/no
+    dataset['PLT_recovery'] = dataset.PLT_recovery.apply(
+        lambda s: 1 if s == "yes" else 0)
+
+    # 'acute_GvHD_II_III_IV', #yes/no
+    dataset['acute_GvHD_II_III_IV'] = dataset.acute_GvHD_II_III_IV.apply(
+        lambda s: 1 if s == "yes" else 0)
+
+    # 'acute_GvHD_III_IV', #yes/no
+    dataset['acute_GvHD_III_IV'] = dataset.acute_GvHD_III_IV.apply(
+        lambda s: 1 if s == "yes" else 0)
+
+    # 'relapse' #yes/no
+    dataset['relapse'] = dataset.relapse.apply(
+        lambda s: 1 if s == "yes" else 0)
+
+    list_for_minmax_scaling = ['donor_age','recipient_age','recipient_body_mass','CD34_x1e6_per_kg','CD3_x1e8_per_kg',
+                               'CD3_to_CD34_ratio','time_to_ANC_recovery','time_to_PLT_recovery',
+                               'time_to_acute_GvHD_III_IV','survival_time']
+
+    scaler = MinMaxScaler()
+
+    dataset_scaled =  pd.DataFrame(scaler.fit_transform(dataset[list_for_minmax_scaling]),columns=list_for_minmax_scaling)
+
+    dataset.drop(columns=list_for_minmax_scaling, inplace=True, axis=1)
+
+    dataset = dataset.join(dataset_scaled)
+
+    # Dummy encoding
+    list_for_dummy_encoding = ['donor_ABO','recipient_age_int','recipient_ABO','disease','disease_group',
+                               'CMV_status','HLA_match','antigen','allel','HLA_group_1']
+
+    dataset_finalized = pd.get_dummies(dataset, columns=list_for_dummy_encoding)
+
+    label = dataset_finalized.pop("survival_status")
+    #dataset_finalized = dataset_finalized.join(label)
+
+    return dataset_finalized, label
+
+
+def dataset_exploration(org_dataset):
+
+    dataset = copy.deepcopy(org_dataset)
+
+    # 1. Convert ? to NaN values
+    for i in range(len(dataset)):
+        for col in dataset:
+            if dataset.at[i,col] == '?':
+                dataset.at[i, col] = np.NaN
 
     # check out columns with the most nan values
     summed_nans_cols = (dataset.isna().sum()).sort_values(ascending=False)
 
-    print(summed_nans_cols.head(10))
+    print(summed_nans_cols.head(20))
 
-    print("%d %% of the 'time_to_acute_GvHD_III_IV ' data is nan" %((summed_nans_cols[0]/dataset.shape[0])*100))
-
-    # Column 'time_to_acute_GvHD_III_IV' has to be dropped because 147 of 187 values are missing.
-    dataset.drop(columns_for_dropping, inplace=True, axis=1)
-
-    tmp_dataset = pd.get_dummies(dataset, columns=columns_for_dummies)
-
-    summed_nans_cols = tmp_dataset.isna().sum()
-
-    summed_nans_rows = tmp_dataset.isna().sum(axis=1)
-    ax = plt.hist(summed_nans_rows)
-  #  plt.show()
-    print(summed_nans_cols.sort_values(ascending=False))
-    #print(tmp_list.sort(reverse=True))
-    #data['donor_age_below_35']=data.donor_age_below_35.apply(lambda s:1 if s=="yes" else 0)
-    print("Test")
-
-    #hier weiter
-#'donor_CMV', #present/absent
-#'recipient_age_below_10', #yes/no
-#'recipient_gender', #male/female
-#'recipient_rh',  #plus/minus
-#'recipient_CMV', #present/absent
-#'gender_match', #female_to_male/other
-#'ABO_match', #machted/mismatched
-#'HLA_mismatch', #matched/mismatched
-#'risk_group', #high/low
-#'stem_cell_source', #peripheral blood/bone marrow
-#'tx_post_relapse', #yes/no
-#'ANC_recovery', #yes/no
-#'PLT_recovery', #yes/no
-#'acute_GvHD_II_III_IV', #yes/no
-#'acute_GvHD_III_IV', #yes/no
-#'extensive_chronic_GvHD' #yes/no
-#'relapse' #yes/no
-
-
-#print(dataset['donor_age'])
-
-#new = pd.get_dummies(dataset,columns=columns_for_dummies)
-#print(new)
-
-#max_value = max(tmp_scan_value_list)
-
-#normalized_scan_value_list = [x / max_value for x in tmp_scan_value_list]
-'''
-from sklearn.impute import SimpleImputer
-
-imputer = SimpleImputer(missing_values=np.nan, strategy='mean')
-encoded_customers = imputer.fit_transform(encoded_customers)
-
-from sklearn.preprocessing import MinMaxScaler
-
-scaler = MinMaxScaler()
-
-customers_scaled = pd.DataFrame(scaler.fit_transform(encoded_customers.astype(float)))
-
-print(customers_scaled.shape)
-print(customers_scaled.head())
-
-def clean_data(data):
-    # Dict for cleaning data
-    months = {"jan":1, "feb":2, "mar":3, "apr":4, "may":5, "jun":6, "jul":7, "aug":8, "sep":9, "oct":10, "nov":11, "dec":12}
-    weekdays = {"mon":1, "tue":2, "wed":3, "thu":4, "fri":5, "sat":6, "sun":7}
-
-    # Clean and one hot encode data
-    x_df = data.to_pandas_dataframe().dropna()
-    jobs = pd.get_dummies(x_df.job, prefix="job")
-    x_df.drop("job", inplace=True, axis=1)
-    x_df = x_df.join(jobs)
-    x_df["marital"] = x_df.marital.apply(lambda s: 1 if s == "married" else 0)
-    x_df["default"] = x_df.default.apply(lambda s: 1 if s == "yes" else 0)
-    x_df["housing"] = x_df.housing.apply(lambda s: 1 if s == "yes" else 0)
-    x_df["loan"] = x_df.loan.apply(lambda s: 1 if s == "yes" else 0)
-    contact = pd.get_dummies(x_df.contact, prefix="contact")
-    x_df.drop("contact", inplace=True, axis=1)
-    x_df = x_df.join(contact)
-    education = pd.get_dummies(x_df.education, prefix="education")
-    x_df.drop("education", inplace=True, axis=1)
-    x_df = x_df.join(education)
-    x_df["month"] = x_df.month.map(months)
-    x_df["day_of_week"] = x_df.day_of_week.map(weekdays)
-    x_df["poutcome"] = x_df.poutcome.apply(lambda s: 1 if s == "success" else 0)
-
-    y_df = x_df.pop("y").apply(lambda s: 1 if s == "yes" else 0)
-
-    return x_df, y_df
-    
-'''
+    print(
+        "%d %% of the 'time_to_acute_GvHD_III_IV ' data is nan" % ((summed_nans_cols[0] / dataset.shape[0]) * 100))
 
 def main():
     dataset = pd.read_csv('dataset/bone-marrow-dataset.csv', sep=',')
+
+    dataset_exploration(dataset)
 
     dropna_data(dataset)
 
