@@ -161,7 +161,7 @@ def main():
     args = parser.parse_args()
 
     # Data is located at:
-    dataset_path = 'https://raw.githubusercontent.com/PhilippRamjoue/Leukemia_Classification/create_dataset/dataset/bone-marrow-dataset.csv?token=AI3WRLFOKOULI4DBK6YQDF27WUQZ2'
+    dataset_path = 'https://raw.githubusercontent.com/PhilippRamjoue/Leukemia_Classification/main/dataset/bone-marrow-dataset.csv'
 
     ds = Dataset.Tabular.from_delimited_files(path=dataset_path)
 
