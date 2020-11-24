@@ -21,9 +21,44 @@ def clean_data(org_dataset):
     # 0. Convert TabularData to pandas Dataframe
     dataset = org_dataset.to_pandas_dataframe()
 
-    columns_for_dropping = ['extensive_chronic_GvHD']
+    # With reference to the 5-years-survival rate in medical context there are 3 categories:
+    # survival_status_0: still alive and over 5 years in observation
+    # survival_status_1: unfortunately dead
+    # survival_status_ongoing: still alive and under 5 years in observation
 
-    # 1. Column 'extensive_chronic_GvHD' can be dropped because 31 of 187 values are missing
+    survival_status_0 = 0
+    survival_status_1 = 0
+    survival_status_ongoing = 0
+    five_years_in_days = 365 * 5
+    index_for_dropping = []
+    for i in range(len(dataset)):
+
+        tmp_time = dataset.loc[i, 'survival_time']
+        tmp_status = dataset.loc[i, 'survival_status']
+
+        if (tmp_time > five_years_in_days) and (0 == tmp_status):
+            survival_status_0 = survival_status_0 + 1
+        elif (tmp_time < five_years_in_days) and (1 == tmp_status):
+            survival_status_1 = survival_status_1 + 1
+        elif (tmp_time < five_years_in_days) and (0 == tmp_status):
+            survival_status_ongoing = survival_status_ongoing + 1
+            index_for_dropping.append(i)
+        else:
+            # there sould not be another type
+            pass
+
+    print("survival_status_0: %d" % survival_status_0)
+    print("survival_status_1: %d" % survival_status_1)
+    print("survival_status_ongoing: %d" % survival_status_ongoing)
+
+    # 0. Drop rows with "ongoing" survival_status
+    dataset.drop(index=index_for_dropping, inplace=True, axis=0)
+    dataset.reset_index(drop=True, inplace=True)
+
+    columns_for_dropping = ['extensive_chronic_GvHD', 'survival_time']
+
+    # 1. Column 'extensive_chronic_GvHD' can be dropped because there are 31 of 121 values are missing.
+    # Column 'survival_time' can be dropped because the label 'survival_status' implicitly includes this feature.
     dataset.drop(columns_for_dropping, inplace=True, axis=1)
 
     # 2. replace all ? in this column with 0.0
@@ -35,20 +70,18 @@ def clean_data(org_dataset):
 
     dataset['time_to_acute_GvHD_III_IV'] = dataset.time_to_acute_GvHD_III_IV.apply(lambda s: '0.0' if s == "?" else s)
 
-    # 3. Convert ? to np.NaN
     tmp_list = []
     for i in range(len(dataset)):
         tmp_counter = 0
         for col in dataset:
-            if dataset.at[i,col] == '?':
+            if dataset.at[i, col] == '?':
                 dataset.at[i, col] = np.NaN
                 tmp_counter = tmp_counter + 1
         tmp_list.append(tmp_counter)
 
     shape_org = dataset.shape
 
-    # 4. drop rows with remaining NaN values
-    dataset.dropna(axis=0,inplace=True)
+    dataset.dropna(axis=0, inplace=True)
     dataset.reset_index(drop=True, inplace=True)
 
     shape_row_drop = dataset.shape
@@ -57,7 +90,7 @@ def clean_data(org_dataset):
     print("Shape of original frame: %s" % str(shape_org))
     print("Shape of frame with dropped nan rows: %s; Loss: %d %%" % (str(shape_row_drop), row_drop_loss))
 
-    # 5. Convert categorical categories to numbers
+    # Convert categorical categories to numbers
 
     # 'donor_age_below_35', #yes/no
     dataset['donor_age_below_35'] = dataset.donor_age_below_35.apply(lambda s: 1 if s == "yes" else 0)
@@ -126,28 +159,28 @@ def clean_data(org_dataset):
     dataset['relapse'] = dataset.relapse.apply(
         lambda s: 1 if s == "yes" else 0)
 
-    # 6. Scaling of columns with numerical values
-
-    list_for_minmax_scaling = ['donor_age','recipient_age','recipient_body_mass','CD34_x1e6_per_kg','CD3_x1e8_per_kg',
-                               'CD3_to_CD34_ratio','time_to_ANC_recovery','time_to_PLT_recovery',
-                               'time_to_acute_GvHD_III_IV','survival_time']
+    list_for_minmax_scaling = ['donor_age', 'recipient_age', 'recipient_body_mass', 'CD34_x1e6_per_kg',
+                               'CD3_x1e8_per_kg',
+                               'CD3_to_CD34_ratio', 'time_to_ANC_recovery', 'time_to_PLT_recovery',
+                               'time_to_acute_GvHD_III_IV']
 
     scaler = MinMaxScaler()
 
-    dataset_scaled =  pd.DataFrame(scaler.fit_transform(dataset[list_for_minmax_scaling]),columns=list_for_minmax_scaling)
+    dataset_scaled = pd.DataFrame(scaler.fit_transform(dataset[list_for_minmax_scaling]),
+                                  columns=list_for_minmax_scaling)
 
     dataset.drop(columns=list_for_minmax_scaling, inplace=True, axis=1)
 
     dataset = dataset.join(dataset_scaled)
 
-    # 7. Dummy encoding of the remaining categorical features
-    list_for_dummy_encoding = ['donor_ABO','recipient_age_int','recipient_ABO','disease','disease_group',
-                               'CMV_status','HLA_match','antigen','allel','HLA_group_1']
+    # Dummy encoding
+    list_for_dummy_encoding = ['donor_ABO', 'recipient_age_int', 'recipient_ABO', 'disease', 'disease_group',
+                               'CMV_status', 'HLA_match', 'antigen', 'allel', 'HLA_group_1']
 
     dataset_finalized = pd.get_dummies(dataset, columns=list_for_dummy_encoding)
 
     label = dataset_finalized.pop("survival_status")
-    #dataset_finalized = dataset_finalized.join(label)
+    # dataset_finalized = dataset_finalized.join(label)
 
     return dataset_finalized, label
 
