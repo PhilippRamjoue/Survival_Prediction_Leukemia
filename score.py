@@ -1,22 +1,20 @@
 import json
 import numpy as np
+import pandas as pd
 import os
 import pickle
 import joblib
-from azureml.core.model import Model
-import azureml.train.automl
-
 
 def init():
     global model
 
-    model_path = Model.get_model_path(model_name='best_automl_model.pkl')
+    model_path =  os.path.join(os.getenv('AZUREML_MODEL_DIR'),'model.pkl')
 
     model = joblib.load(model_path)
 
 def run(raw_data):
 
-    data = np.array(json.loads(raw_data)['data'])
+    data = pd.read_json(raw_data,orient='records')
     y = model.predict(data)
 
     return y.tolist()
