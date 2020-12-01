@@ -101,31 +101,384 @@ First thing to do is to explore the dataset. Following 39 categories are provide
 
 In sum there are 189 entries with each 39 columns.
 
+Exploring the dataset shows that there are cells with '?':
 
+<img src="/images/dataset_exploration.PNG" width=75% height=75% /> 
 
-### Cleaning
+This 'nan' values have to be dropped for the model training.
+
+### Dataset Insights
+
+First test is to drop nan values without a deep data exploration:
+
+```
+
+dataset_path = 'https://raw.githubusercontent.com/PhilippRamjoue/Leukemia_Classification/main/dataset/bone-marrow-dataset.csv'
+
+dataset = pd.read_csv(dataset_path, sep=',')
+
+dropped_columns_frame = dataset.dropna(axis=1)
+
+dropped_rows_frame = dataset.dropna(axis=0)
+```
+
+This dropping results in massive losses in the dataset:
+
+- Shape of original frame: (187, 39)
+- Shape of frame with dropped nan columns: (187, 24); Loss: 38 %
+- Shape of frame with dropped nan rows: (27, 39); Loss: 85 %
+
+This drop losses are definitely to massive. Next step is to get insights which columns have the most
+'?' values:
+
+```
+# Convert ? to NaN values
+for i in range(len(dataset)):
+    for col in dataset:
+        if dataset.at[i,col] == '?':
+            dataset.at[i, col] = np.NaN
+
+# check out columns with the most nan values
+summed_nans_cols = (dataset.isna().sum()).sort_values(ascending=False)
+```
+
+The result is:
+
+- time_to_acute_GvHD_III_IV    147
+- extensive_chronic_GvHD        31
+- time_to_PLT_recovery          17
+- CMV_status                    16
+- recipient_CMV                 14
+- CD3_x1e8_per_kg                5
+- time_to_ANC_recovery           5
+- CD3_to_CD34_ratio              5
+- recipient_body_mass            2
+- donor_CMV                      2
+- recipient_rh                   2
+- allel                          1
+- recipient_ABO                  1
+- antigen                        1
+- ABO_match                      1
+
+__78 % of the 'time_to_acute_GvHD_III_IV ' data is nan!__ Dropping rows with NaN values would
+result in a loss of 78% only because of this column. 
+
+When evaluating the table, it is noticeable that many of the entries are _'time'_ or _'status'_ values.
+Diving even deeper in the dataset shows that there a specific connections and correlation available:
+
+#### time_to_acute_GvHD_III_IV
+
+<img src="/images/GvHD.png" width=75% height=75% /> 
+
+#### time_to_PLT_recovery
+
+<img src="/images/PLT.png" width=75% height=75% /> 
+
+#### time_to_ANC_recovery
+
+<img src="/images/ANC.png" width=75% height=75% /> 
+
+#### CMV_status
+
+<img src="/images/CMV.png" width=75% height=75% /> 
+
+#### CD3_to_CD34_ratio
+
+<img src="/images/CD_ratio.png" width=75% height=75% /> 
+
+#### ABO_match
+
+<img src="/images/AB0.png" width=75% height=75% /> 
+
+__Finding__
+
+The _'time'_ columns have a connection to the specific related parameter column. If the related
+parameter is not present there is also no _'time'_ available. Because of this the '?' value of the
+related _'time'_ value can be set to 0. With this replacement the parameter can be used in the 
+model.
+
+The other three columns are values that are related to two conditions. If one condition is '?' the 
+whole ratio is '?'. We can't replace a missing value in this case so rows with a '?' in this columns will
+be dropped in the cleaning step.
+
+For the column _'extensive_chronic_GvHD'_ no correlations could be found. Replacing a '?' with 'No'
+is also not a good idea because we don't know if the values is really 'No' or simply missing.
+
+After this dataset exploration the next step is cleaning and preparing the dataset for model development.
+
+### Dataset cleaning
+
+The specific clean function is in the [train.py](train.py) script and details can be seen there.
+
+It's worth to mention that the initial cleaning function has be updated because of some side effects 
+in the model training.
 
 #### Version 1
 
+In the first version 'clean_data' can be seen in the script [manual_test.py](manual_tests.py).
+
+The specific models are explained in detail later. For now is known that there was a Hyperdrive run
+a sklearn LogisticRegression model and an AutoML run.
+
+The accuracy of the Hyperdrive run was __78%__:
+
+<img src="/images/hyperdrive_best_run.PNG" width=75% height=75% /> 
+
+The accuracy of the AutoML run was __93%__:
+
+<img src="/images/automl_best_model.PNG" width=75% height=75% /> 
+
+
+Both results are very good and the AutoML accuracy is even amazing but a deeper insight in the 
+AutoML Explanations visualize the problem:
+
+<img src="/images/automl_global_importance.PNG" width=75% height=75% /> 
+
+The Parameter 'survival_time' has a massive impact on the model and needs a re-thinking of the usage.
+
 #### Version 2
 
+Checking out the parameters _'survival_time'_ and _'survival_status'_ shows that there is a correlation:
 
-## Automated ML
-*TODO*: Give an overview of the `automl` settings and configuration you used for this experiment
+- __survival_time__ - Time of observation (if alive) or time to event (if dead) in days
+- __survival_status__ - Survival status (0 - alive, 1 - dead)
+
+The question of survival status is particularly interesting from a medical perspective. Because of this 
+the data will be cleaned/transformed again:
+
+    # With reference to the 5-years-survival rate in medical context there are 3 categories:
+    # survival_status_0: still alive and over 5 years in observation
+    survival_status_0: 36
+    
+    # survival_status_1: unfortunately dead
+    survival_status_1: 85
+    
+    # survival_status_ongoing: still alive and under 5 years in observation
+    survival_status_ongoing: 66
+    
+The rows in the category _'survival_status_ongoing'_ will be dropped because there is not a "final"
+medical status available.
+
+    # After dropping 'survival_status_ongoing'
+    Shape of original frame: (121, 37)
+
+    # After dropping/cleaning the dataset with the existing methodes of version 1
+    Shape of frame with dropped nan rows: (104, 37); Loss: 14 %
+
+In the next sections the models itself are explained.
+
+## Hyperparameter Tuning
+
+As a model for Hyperparameter Tuning a sklearn LogisticRegression model is used because it is solid and 
+robust. 
+
+This [LogisticRegression](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html)
+model is trained with different hyperparameters C (Inverse of regularization strength) and
+max_iter (Maximum number of iterations taken for the solvers to converge).
+
+The hyperparameter tuning is executed with Azure [Hyperdrive package](https://docs.microsoft.com/en-us/python/api/azureml-train-core/azureml.train.hyperdrive?view=azure-ml-py). This tool provides the possibility to define the parameter search space, the metric and many more. The main task is to automate the hyperparameter search process.
+
+To find the best LogisticRegression model the following Hyperdrive config is used:
+
+
+```
+hyperdrive_run_config = HyperDriveConfig(estimator=estimator,
+                             hyperparameter_sampling=param_sampling,
+                             policy=early_termination_policy,
+                             primary_metric_name="accuracy",
+                             primary_metric_goal=PrimaryMetricGoal.MAXIMIZE,
+                             max_total_runs=50,
+                             max_concurrent_runs=4)
+```
+
+ 1. __estimator__
+    To train the LogisticRegression model is useful to provide a training script (train.py). This script is executed
+    by an [Estimator](https://docs.microsoft.com/en-us/python/api/azureml-train-core/azureml.train.estimator.estimator?view=azure-ml-py) object.
+
+    ```
+    script_parameter = {
+        '--C': 1.0,
+        '--max_iter': 100
+    }
+    
+    #TODO: Create your estimator and hyperdrive config
+    estimator = Estimator(source_directory='.',
+                    script_params=script_parameter,
+                    compute_target=cpu_cluster,
+                    entry_script='train.py',
+                    pip_packages=['sklearn'])
+    ```
+    
+ 2. __hyperparameter_sampling__
+   
+    To provide the different parameter spaces for the tuning a 
+    [RandomParamterSampling](https://docs.microsoft.com/en-us/python/api/azureml-train-core/azureml.train.hyperdrive.randomparametersampling?view=azure-ml-py) object is used. Random sampling is a good start to explore the different parameter combinations and the range in which good values are possible. The next step would be to refine the search space to improve the results. 
+
+    Other provided [algorithms](https://docs.microsoft.com/en-us/python/api/azureml-train-core/azureml.train.hyperdrive.hyperparametersampling?view=azure-ml-py) are Grid and Bayesian sampling. Grip sampling only works with discrete hyperparameters and is not suitable for my purposes because I have no good feeling with discrete C values to use. Additionally, Grid sampling could be very exhaustive. In the Bayesian sampling, the current samples are picked concerning the previous set and the performance. Because of this, the best results are achieved with a small number of concurrent runs. This could lead to an exhaustive and time-consuming tuning task.
+
+
+    ```
+    ps = RandomParameterSampling( {
+            '--C': uniform(0.1, 1.0),
+            '--max_iter': choice(10, 25, 50, 100, 1000)
+        }
+    )
+    
+    ```
+
+    The Object uses uniform distributed values in the range 0.1 to 1.0 for the C parameter and fixed values of choice for the maximum iterations for the solver.
+
+
+
+ 3. __policy__
+
+    As an early terminating policy, the [BanditPolicy](https://docs.microsoft.com/en-us/python/api/azureml-train-core/azureml.train.hyperdrive.banditpolicy?view=azure-ml-py&preserve-view=true#&preserve-view=truedefinition) is chosen. With a small slack_factor, the policy is very aggressive and can save computing time. This is great for the start. 
+
+    Other provided [policies](https://docs.microsoft.com/en-us/azure/machine-learning/how-to-tune-hyperparameters#early-termination) are Median stopping policy, Truncation selection policy and No termination policy (default). Median stopping can be used as a conservative policy and Truncation selection as an aggressive policy. No termination policy is no option because we want to save compute time.
+
+    
+    ``` 
+    early_termination_policy = BanditPolicy(slack_factor = 0.1, evaluation_interval=1, delay_evaluation=5)
+
+    ```
+
+    The early termination policy is applied at every interval when metrics are reported, starting at evaluation interval 5. Any run whose best metric is less than (1/(1+0.1) or 91% of the best performing run will be terminated.
 
 ### Results
+
+The Hyperdrive run was successful:
+
+<img src="/images/hyperdrive_runwidget_2nd.PNG" width=100% height=100% /> 
+
+After 50 runs the best result is ~ 64% accuracy with the parameters C=0.108 and max_iter=100.
+
+<img src="/images/hyperdrive_best_run__details_2nd.PNG" width=100% height=100% /> 
+
+As visible on the next picture most of the runs are around 59%. 
+
+<img src="/images/hyperdrive_best_run_2nd.PNG" width=100% height=100% /> 
+
+A deeper insight visualizes that C values in the range from 0.3 to 0.6, independent from the iterations, perform worse than 
+the other C values. 
+
+<img src="/images/hyperdrive_accuracy_2nd_2.PNG" width=100% height=100% /> 
+
+The similar accuracy values and the significant chart suggest that the model is not really suitable. 
+
+<img src="/images/hyperdrive_accuracy_2nd.PNG.PNG" width=100% height=100% /> 
+
+In the next section the AutoML run is explained and hopefully better.
+
+## Automated ML
+
+First AutoML settings and an AutoML configuration are needed. It's a classification task that should be optimized
+to best accuracy. The training data is the dataset incl. the label _'survival_status'_. Other settings are the experiment
+timeout after 30 min, an iteration timeout after 5 min and a max. number of concurrent iterations. Because a compute
+cluster with four nodes is used, four concurrent runs can be performed.
+
+```
+automl_settings = {'experiment_timeout_minutes':30,
+                    'primary_metric':'accuracy',
+                    'enable_early_stopping':True,
+                    'n_cross_validations':5,
+                    'max_concurrent_iterations':4
+                    }
+
+automl_config = AutoMLConfig(
+    task="classification",
+    compute_target=cpu_cluster,
+    training_data=training_data,
+    iterations=30,
+    iteration_timeout_minutes=5,
+    label_column_name='survival_status',
+    **automl_settings
+    )
+```
+
+### Results
+
+The training results seem to be more realistic than the 92% of the first run. The best solution was a VotingEnsemble model
+with ~71% accuracy. In other runs the Voting Ensemble model had ~77% that's also not bad and more realistic than 92%. 
+
+<img src="/images/automl_runwidget_2nd.PNG" width=100% height=100% /> 
+
+<img src="/images/automl_best_model_2nd.PNG" width=100% height=100% /> 
+
+This Ensemble algorithm combines several different algorithms and takes the majority of the votes.
+The result is a very robust model. These are the chosen algorithms and their specific weights:
+
+```
+lightgbmclassifier ,randomforestclassifier, randomforestclassifier, randomforestclassifier, randomforestclassifier, extratreesclassifier, randomforestclassifier, sgdclassifierwrapper
+
+0.13333333333333333, 0.2, 0.13333333333333333, 0.13333333333333333, 0.2, 0.06666666666666667, 0.06666666666666667, 0.06666666666666667
+```
+With the Azure SDK it's possible to get deeper insights in the VotingEnsemble model. Next cell visualizes details of
+the lightgbmclassifier (especially the hyperparameters) in the ensemble:
+
+```
+lightgbmclassifier
+{'boosting_type': 'gbdt',
+ 'class_weight': None,
+ 'colsample_bytree': 0.8911111111111111,
+ 'importance_type': 'split',
+ 'learning_rate': 0.09473736842105263,
+ 'max_bin': 70,
+ 'max_depth': 6,
+ 'min_child_samples': 9,
+ 'min_child_weight': 1,
+ 'min_split_gain': 0.7368421052631579,
+ 'n_estimators': 50,
+ 'n_jobs': 1,
+ 'num_leaves': 170,
+ 'objective': None,
+ 'random_state': None,
+ 'reg_alpha': 0.5789473684210527,
+ 'reg_lambda': 0.6842105263157894,
+ 'silent': True,
+ 'subsample': 0.5942105263157895,
+ 'subsample_for_bin': 200000,
+ 'subsample_freq': 0,
+ 'verbose': -10}
+```
+
+Also the other trained models in the AutoML run are in a similar range but almost all a better than the LogisticRegression model:
+
+<img src="/images/automl_models_2nd.PNG" width=100% height=100% /> 
+
+Checking out the explanations of the best model show interesting details:
+
+<img src="/images/automl_best_model_global_importance_2nd.PNG" width=100% height=100% /> 
+
+The paper [Kalwak et al., 2010](https://www.bbmt.org/article/S1083-8791(10)00148-5/fulltext) present the hypothesis that
+increased dosage of CD34+ cells / kg extends overall survival time without simultaneous occurrence of undesirable events affecting patients' quality of life.
+
+It's visible, that the most important features of the AutoML model are 'relapse' and CD34_x1e6_per_kg. The next chart 
+visualizes the distribution of the features:
+
+<img src="/images/automl_best_model_summary_importance_2nd.PNG" width=100% height=100% /> 
+
+The distribution of some features is a bit imbalanced but the CD34_x1e6_per_kg parameter is almost balanced. To check out
+the performance of the model some other metrics than accuracy are visualized:
+
+#### ROC curve
+<img src="/images/roc.PNG" width=100% height=100% /> 
+
+Inspecting the chart shows that the ROC curve is not very good. 
+
+#### Precision Recall curve
+<img src="/images/precision_recall.PNG" width=100% height=100% /> 
+
+#### ROC curve
+<img src="/images/roc.PNG" width=100% height=100% /> 
+
+
+
+<img src="/images/confusion_matrix.PNG" width=100% height=100% /> 
+
 *TODO*: What are the results you got with your automated ML model? What were the parameters of the model? How could you have improved it?
 
 *TODO* Remeber to provide screenshots of the `RunDetails` widget as well as a screenshot of the best model trained with it's parameters.
 
-## Hyperparameter Tuning
-*TODO*: What kind of model did you choose for this experiment and why? Give an overview of the types of parameters and their ranges used for the hyperparameter search
-
-
-### Results
-*TODO*: What are the results you got with your model? What were the parameters of the model? How could you have improved it?
-
-*TODO* Remeber to provide screenshots of the `RunDetails` widget as well as a screenshot of the best model trained with it's parameters.
 
 ## Model Deployment
 *TODO*: Give an overview of the deployed model and instructions on how to query the endpoint with a sample input.
@@ -136,5 +489,4 @@ In sum there are 189 entries with each 39 columns.
 - Demo of the deployed  model
 - Demo of a sample request sent to the endpoint and its response
 
-## Standout Suggestions
-*TODO (Optional):* This is where you can provide information about any standout suggestions that you have attempted.
+

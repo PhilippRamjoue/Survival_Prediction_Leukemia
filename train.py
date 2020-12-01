@@ -55,10 +55,13 @@ def clean_data(org_dataset):
     dataset.drop(index=index_for_dropping, inplace=True, axis=0)
     dataset.reset_index(drop=True, inplace=True)
 
-    columns_for_dropping = ['extensive_chronic_GvHD', 'survival_time']
+    # change the classes in survival status: 1 = alive, 0 = dead. We want the model to predict 1 correctly!
+    dataset['survival_status'] = dataset.survival_status.apply(lambda s: 0 if s == 1 else 1)
 
     # 1. Column 'extensive_chronic_GvHD' can be dropped because there are 31 of 121 values are missing.
     # Column 'survival_time' can be dropped because the label 'survival_status' implicitly includes this feature.
+    columns_for_dropping = ['extensive_chronic_GvHD', 'survival_time']
+
     dataset.drop(columns_for_dropping, inplace=True, axis=1)
 
     # 2. replace all ? in this column with 0.0

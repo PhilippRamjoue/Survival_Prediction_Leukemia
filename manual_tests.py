@@ -239,6 +239,8 @@ def clean_data_v2(org_dataset):
     dataset.drop(index=index_for_droping, inplace=True, axis=0)
     dataset.reset_index(drop=True, inplace=True)
 
+    dataset['survival_status'] = dataset.survival_status.apply(lambda s: 0 if s == 1 else 1)
+
     columns_for_dropping = ['extensive_chronic_GvHD','survival_time']
 
     # 1. Column 'extensive_chronic_GvHD' can be dropped because there are 31 of 121 values are missing.
