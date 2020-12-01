@@ -569,7 +569,7 @@ Checking out the experiment run in which the best model was found it's visible, 
 
 <img src="/final_images/automl_deployed.PNG" width=100% height=100% /> 
 
-To test the webservice one possible is to run the service with test data:
+To test the webservice one possible solution is to run the service with test data directly. Another solution would a API request. In the end, the result is the same:
 
 ```
 df_test = training_data.to_pandas_dataframe()
