@@ -1,9 +1,16 @@
 # Survival prediction after bone marrow transplantation
 
-*TODO:* Write a short introduction to your project.
+In this project I analyze a real world medical dataset and try to train a machine learning model that predicts the
+specific target correctly. The Dataset details are in the next section. For model training Microsoft Azure is used. 
+On the one hand there is a sklearn model with optimized hyperparameters by HyperDrive, on the other hand there is a 
+trained AutoML model. Both models will be compared and the better one will be deployed as a webservice for inference
+purposes.
 
 ## Project Set Up and Installation
-*OPTIONAL:* If your project has any special installation steps, this is where you should put it. To turn this project into a professional portfolio project, you are encouraged to explain how to set up this project in AzureML.
+This project was realized in Microsoft Azure Machine Learning studio
+[link azure machine learning](https://azure.microsoft.com/de-de/free/services/machine-learning/). The project itself
+is splitted in a [hyperparameter tuning notebook](hyperparameter_tuning.ipynb) and an 
+[AutoML training and model deployment notebook](automl.ipynb).  
 
 ## Dataset
 
@@ -103,7 +110,7 @@ In sum there are 189 entries with each 39 columns.
 
 Exploring the dataset shows that there are cells with '?':
 
-<img src="/images/dataset_exploration.PNG" width=75% height=75% /> 
+<img src="/final_images/dataset_exploration.PNG" width=100% height=100% /> 
 
 This 'nan' values have to be dropped for the model training.
 
@@ -168,29 +175,29 @@ Diving even deeper in the dataset shows that there a specific connections and co
 
 #### time_to_acute_GvHD_III_IV
 
-<img src="/images/GvHD.png" width=75% height=75% /> 
+<img src="/final_images/GvHD.png" width=50% height=50% /> 
 
 #### time_to_PLT_recovery
 
-<img src="/images/PLT.png" width=75% height=75% /> 
+<img src="/final_images/PLT.png" width=50% height=50% /> 
 
 #### time_to_ANC_recovery
 
-<img src="/images/ANC.png" width=75% height=75% /> 
+<img src="/final_images/ANC.png" width=50% height=50% /> 
 
 #### CMV_status
 
-<img src="/images/CMV.png" width=75% height=75% /> 
+<img src="/final_images/CMV.png" width=50% height=50% /> 
 
 #### CD3_to_CD34_ratio
 
-<img src="/images/CD_ratio.png" width=75% height=75% /> 
+<img src="/final_images/CD_ratio.png" width=50% height=50% /> 
 
 #### ABO_match
 
-<img src="/images/AB0.png" width=75% height=75% /> 
+<img src="/final_images/AB0.png" width=50% height=50% /> 
 
-__Finding__
+__Findings__
 
 The _'time'_ columns have a connection to the specific related parameter column. If the related
 parameter is not present there is also no _'time'_ available. Because of this the '?' value of the
@@ -210,29 +217,29 @@ After this dataset exploration the next step is cleaning and preparing the datas
 
 The specific clean function is in the [train.py](train.py) script and details can be seen there.
 
-It's worth to mention that the initial cleaning function has be updated because of some side effects 
+It's worth to mention that the initial cleaning function has to be updated because of some side effects 
 in the model training.
 
 #### Version 1
 
 In the first version 'clean_data' can be seen in the script [manual_test.py](manual_tests.py).
 
-The specific models are explained in detail later. For now is known that there was a Hyperdrive run
-a sklearn LogisticRegression model and an AutoML run.
+The specific models are explained in detail later. For now it's known that there was a earlier Hyperdrive run
+(a sklearn LogisticRegression model) and an AutoML run.
 
 The accuracy of the Hyperdrive run was __78%__:
 
-<img src="/images/hyperdrive_best_run.PNG" width=75% height=75% /> 
+<img src="/final_images/hyperdrive_best_run_1.PNG" width=100% height=100% /> 
 
 The accuracy of the AutoML run was __93%__:
 
-<img src="/images/automl_best_model.PNG" width=75% height=75% /> 
+<img src="/final_images/automl_best_model_1.PNG" width=100% height=100% /> 
 
 
 Both results are very good and the AutoML accuracy is even amazing but a deeper insight in the 
 AutoML Explanations visualize the problem:
 
-<img src="/images/automl_global_importance.PNG" width=75% height=75% /> 
+<img src="/final_images/automl_global_importance_1.PNG" width=100% height=100% /> 
 
 The Parameter 'survival_time' has a massive impact on the model and needs a re-thinking of the usage.
 
@@ -265,6 +272,12 @@ medical status available.
     # After dropping/cleaning the dataset with the existing methodes of version 1
     Shape of frame with dropped nan rows: (104, 37); Loss: 14 %
 
+Additionally the class labels are switched: alive = 1, dead = 0:
+
+```
+dataset['survival_status'] = dataset.survival_status.apply(lambda s: 0 if s == 1 else 1)
+
+```
 In the next sections the models itself are explained.
 
 ## Hyperparameter Tuning
@@ -348,24 +361,24 @@ hyperdrive_run_config = HyperDriveConfig(estimator=estimator,
 
 The Hyperdrive run was successful:
 
-<img src="/images/hyperdrive_runwidget_2nd.PNG" width=100% height=100% /> 
+<img src="/final_images/hyperdrive_runwidget.PNG" width=100% height=100% /> 
 
-After 50 runs the best result is ~ 64% accuracy with the parameters C=0.108 and max_iter=100.
+After 50 runs the best result is ~ 62% accuracy with the parameters C=0.101 and max_iter=1000.
 
-<img src="/images/hyperdrive_best_run__details_2nd.PNG" width=100% height=100% /> 
+<img src="/final_images/hyperdrive_best_run.PNG" width=100% height=100% /> 
 
 As visible on the next picture most of the runs are around 59%. 
 
-<img src="/images/hyperdrive_best_run_2nd.PNG" width=100% height=100% /> 
+<img src="/final_images/hyperdrive_runs.PNG" width=100% height=100% /> 
 
 A deeper insight visualizes that C values in the range from 0.3 to 0.6, independent from the iterations, perform worse than 
 the other C values. 
 
-<img src="/images/hyperdrive_accuracy_2nd_2.PNG" width=100% height=100% /> 
+<img src="/final_images/hyperdrive_accuracy_lines.PNG" width=100% height=100% /> 
 
 The similar accuracy values and the significant chart suggest that the model is not really suitable. 
 
-<img src="/images/hyperdrive_accuracy_2nd.PNG.PNG" width=100% height=100% /> 
+<img src="/final_images/hyperdrive_accuracy.PNG" width=100% height=100% /> 
 
 In the next section the AutoML run is explained and hopefully better.
 
@@ -398,56 +411,60 @@ automl_config = AutoMLConfig(
 ### Results
 
 The training results seem to be more realistic than the 92% of the first run. The best solution was a VotingEnsemble model
-with ~71% accuracy. In other runs the Voting Ensemble model had ~77% that's also not bad and more realistic than 92%. 
+with ~74% accuracy. In other runs the Voting Ensemble model had ~77% that's also not bad and more realistic than 92%. 
 
-<img src="/images/automl_runwidget_2nd.PNG" width=100% height=100% /> 
+<img src="/final_images/automl_runwidget_3.PNG" width=100% height=100% /> 
 
-<img src="/images/automl_best_model_2nd.PNG" width=100% height=100% /> 
+<img src="/final_images/automl_deployed.PNG" width=100% height=100% /> 
 
 This Ensemble algorithm combines several different algorithms and takes the majority of the votes.
 The result is a very robust model. These are the chosen algorithms and their specific weights:
 
 ```
-lightgbmclassifier ,randomforestclassifier, randomforestclassifier, randomforestclassifier, randomforestclassifier, extratreesclassifier, randomforestclassifier, sgdclassifierwrapper
+sgdclassifierwrapper, xgboostclassifier, extratreesclassifier, randomforestclassifier, sgdclassifierwrapper, randomforestclassifier, extratreesclassifier
 
-0.13333333333333333, 0.2, 0.13333333333333333, 0.13333333333333333, 0.2, 0.06666666666666667, 0.06666666666666667, 0.06666666666666667
+0.14285714285714285, 0.14285714285714285, 0.14285714285714285, 0.14285714285714285, 0.14285714285714285, 0.14285714285714285, 0.14285714285714285
 ```
 With the Azure SDK it's possible to get deeper insights in the VotingEnsemble model. Next cell visualizes details of
-the lightgbmclassifier (especially the hyperparameters) in the ensemble:
+the xgboostclassifier (especially the hyperparameters) in the ensemble:
 
 ```
-lightgbmclassifier
-{'boosting_type': 'gbdt',
- 'class_weight': None,
- 'colsample_bytree': 0.8911111111111111,
- 'importance_type': 'split',
- 'learning_rate': 0.09473736842105263,
- 'max_bin': 70,
- 'max_depth': 6,
- 'min_child_samples': 9,
+xgboostclassifier
+{'base_score': 0.5,
+ 'booster': 'gbtree',
+ 'colsample_bylevel': 1,
+ 'colsample_bynode': 1,
+ 'colsample_bytree': 1,
+ 'gamma': 0,
+ 'learning_rate': 0.1,
+ 'max_delta_step': 0,
+ 'max_depth': 3,
  'min_child_weight': 1,
- 'min_split_gain': 0.7368421052631579,
- 'n_estimators': 50,
+ 'missing': nan,
+ 'n_estimators': 100,
  'n_jobs': 1,
- 'num_leaves': 170,
- 'objective': None,
- 'random_state': None,
- 'reg_alpha': 0.5789473684210527,
- 'reg_lambda': 0.6842105263157894,
- 'silent': True,
- 'subsample': 0.5942105263157895,
- 'subsample_for_bin': 200000,
- 'subsample_freq': 0,
- 'verbose': -10}
+ 'nthread': None,
+ 'objective': 'binary:logistic',
+ 'random_state': 0,
+ 'reg_alpha': 0,
+ 'reg_lambda': 1,
+ 'scale_pos_weight': 1,
+ 'seed': None,
+ 'silent': None,
+ 'subsample': 1,
+ 'tree_method': 'auto',
+ 'verbose': -10,
+ 'verbosity': 0}
+
 ```
 
 Also the other trained models in the AutoML run are in a similar range but almost all a better than the LogisticRegression model:
 
-<img src="/images/automl_models_2nd.PNG" width=100% height=100% /> 
+<img src="/final_images/automl_all_runs_3.PNG" width=100% height=100% /> 
 
 Checking out the explanations of the best model show interesting details:
 
-<img src="/images/automl_best_model_global_importance_2nd.PNG" width=100% height=100% /> 
+<img src="/final_images/automl_global_importance_3.PNG" width=100% height=100% /> 
 
 The paper [Kalwak et al., 2010](https://www.bbmt.org/article/S1083-8791(10)00148-5/fulltext) present the hypothesis that
 increased dosage of CD34+ cells / kg extends overall survival time without simultaneous occurrence of undesirable events affecting patients' quality of life.
@@ -455,29 +472,28 @@ increased dosage of CD34+ cells / kg extends overall survival time without simul
 It's visible, that the most important features of the AutoML model are 'relapse' and CD34_x1e6_per_kg. The next chart 
 visualizes the distribution of the features:
 
-<img src="/images/automl_best_model_summary_importance_2nd.PNG" width=100% height=100% /> 
+<img src="/final_images/automl_summary_importance_3.PNG" width=100% height=100% /> 
 
-The distribution of some features is a bit imbalanced but the CD34_x1e6_per_kg parameter is almost balanced. To check out
-the performance of the model some other metrics than accuracy are visualized:
+The distribution of some features is a bit imbalanced but the CD34_x1e6_per_kg parameter is almost balanced. What's also
+visible is the fact, that the predicted classes of the CD34_x1e6_per_kg are mixed. Compared with the relapse parameter the  
+CD34_x1e6_per_kg parameter can not be linked to a class label.
+
+The next step is to check out some metrics next to the accuracy score:
+
+<img src="/final_images/automl_metrics.PNG" width=100% height=100% /> 
+
+Especially for Precision-recall, ROC and Confusion a visualization is helpful:
 
 #### ROC curve
-<img src="/images/roc.PNG" width=100% height=100% /> 
+<img src="/final_images/automl_roc_3.PNG" width=100% height=100% /> 
 
 Inspecting the chart shows that the ROC curve is not very good. 
 
 #### Precision Recall curve
-<img src="/images/precision_recall.PNG" width=100% height=100% /> 
+<img src="/final_images/automl_precision_recall_3.PNG" width=100% height=100% /> 
 
 #### ROC curve
-<img src="/images/roc.PNG" width=100% height=100% /> 
-
-
-
-<img src="/images/confusion_matrix.PNG" width=100% height=100% /> 
-
-*TODO*: What are the results you got with your automated ML model? What were the parameters of the model? How could you have improved it?
-
-*TODO* Remeber to provide screenshots of the `RunDetails` widget as well as a screenshot of the best model trained with it's parameters.
+<img src="final_images/automl_confusion.PNG" width=100% height=100% /> 
 
 
 ## Model Deployment
