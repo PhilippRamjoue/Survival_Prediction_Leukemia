@@ -217,7 +217,7 @@ After this dataset exploration the next step is cleaning and preparing the datas
 
 The specific clean function is in the [train.py](train.py) script and details can be seen there.
 
-It's worth to mention that the initial cleaning function has to be updated because of some side effects 
+It's worth to mention that the initial cleaning function (Version 1) has been updated because of some side effects 
 in the model training.
 
 #### Version 1
@@ -237,7 +237,7 @@ The accuracy of the AutoML run was __93%__:
 
 
 Both results are very good and the AutoML accuracy is even amazing but a deeper insight in the 
-AutoML Explanations visualize the problem:
+AutoML Explanations visualizes the problem:
 
 <img src="/final_images/automl_global_importance_1.PNG" width=100% height=100% /> 
 
@@ -458,7 +458,7 @@ xgboostclassifier
 
 ```
 
-Also the other trained models in the AutoML run are in a similar range but almost all a better than the LogisticRegression model:
+Also the other trained models in the AutoML run are in a similar range but almost all are better than the LogisticRegression model:
 
 <img src="/final_images/automl_all_runs_3.PNG" width=100% height=100% /> 
 
@@ -475,8 +475,8 @@ visualizes the distribution of the features:
 <img src="/final_images/automl_summary_importance_3.PNG" width=100% height=100% /> 
 
 The distribution of some features is a bit imbalanced but the CD34_x1e6_per_kg parameter is almost balanced. What's also
-visible is the fact, that the predicted classes of the CD34_x1e6_per_kg are mixed. Compared with the relapse parameter the  
-CD34_x1e6_per_kg parameter can not be linked to a class label.
+visible is the fact, that the predicted classes of the CD34_x1e6_per_kg are mixed. Compared with the relapse parameter the
+CD34_x1e6_per_kg parameter can not reliably be linked to a class label.
 
 The next step is to check out some metrics next to the accuracy score:
 
@@ -487,22 +487,124 @@ Especially for Precision-recall, ROC and Confusion a visualization is helpful:
 #### ROC curve
 <img src="/final_images/automl_roc_3.PNG" width=100% height=100% /> 
 
-Inspecting the chart shows that the ROC curve is not very good. 
+Inspecting the chart shows that the ROC curve is not very good. The best configuration results in ~75% TPR 
+(True-Positive-Rate) with ~25% FPR (False-Positive-Rate). One possible problem could the imbalance of the dataset with
+36 class 1 labels (alive) and 85 class 0 labels (dead). 
+
+A better metric for imbalanced datasets is the precision-recall chart. The FPR is replaced by precision because 
+the number of True-Negatives (TN) is not part of the precision calculation. Thus Precision is independent of imbalanced 
+data.
 
 #### Precision Recall curve
 <img src="/final_images/automl_precision_recall_3.PNG" width=100% height=100% /> 
 
-#### ROC curve
+The precision-recall chart looks a bit better but also not very good. To get a better feeling for the values the next
+step is to inspect the confusion matrix that is the base for the metrics:
+
+#### Confusion matrix
 <img src="final_images/automl_confusion.PNG" width=100% height=100% /> 
 
+Checking out the matrix shows:
 
+- True Positives (TP): 0.41
+- False Negatives (FN): 0.59
+- False Positives (FP): 0.1
+- True Negatives (TN): 0.9 
+
+#### What does this mean?
+
+This means that the algorithm predicted 41% of the patient as alive that a really alive __BUT__ 59% as dead that are 
+also alive. On the other side the model predicted 90% of dead patient correctly. This behaviour can be explained
+by data distribution and the feature importance. 
+
+<img src="/final_images/automl_summary_importance_3.PNG" width=100% height=100% /> 
+
+The relapse feature has a very high importance and a clear distribution that results in very good results for prediction
+of class 0 (dead). The other features like CD34_x1e6_per_kg, time_to_PLT_recovery and recipient_body_mass have class labels
+in both distributions. A clear spearation is unfortunately not possible.
+ 
 ## Model Deployment
-*TODO*: Give an overview of the deployed model and instructions on how to query the endpoint with a sample input.
+
+The comparison of the LogisticRegression and the AutoML accuracy show that the AutoML model has to be deployed. 
+
+First the best model has to be registered:
+
+```
+model_name = best_run.properties['model_name']
+print(model_name) # AutoML5579856fb28
+automl_model= auto_run.register_model(model_name=model_name)
+```
+The registered models can be seen in the Machine Learning studio too.
+
+<img src="/final_images/deployed_models.PNG" width=100% height=100% /> 
+
+After this a webservice has to be deployed. For this, an InferenceConfig with [scoring script](score.py) and an ACIWebService
+configuration is needed:
+
+```
+inference_config = InferenceConfig(entry_script="score.py")
+
+# Set deployment configuration
+deployment_config = AciWebservice.deploy_configuration(cpu_cores = 1,
+                                                       memory_gb = 1)
+
+# Define the model, inference, & deployment configuration and web service name and location to deploy
+service = Model.deploy(workspace = ws,
+                       name = "webservice",
+                       models = [automl_model],
+                       inference_config = inference_config,
+                       deployment_config = deployment_config)
+
+service.wait_for_deployment(show_output=True)
+```
+
+After successful service deployment the service is also visible in the Machine Learning studio:
+
+<img src="/final_images/webservice.PNG" width=100% height=100% /> 
+
+<img src="/final_images/webservice_details.PNG" width=100% height=100% /> 
+
+Checking out the experiment run in which the best model was found it's visible, that the model is "registered" and 
+"deployed" as a webservice.
+
+<img src="/final_images/automl_deployed.PNG" width=100% height=100% /> 
+
+To test the webservice one possible is to run the service with test data:
+
+```
+df_test = training_data.to_pandas_dataframe()
+y_test=df_test['survival_status']
+x_test=df_test.drop(['survival_status'],axis=1)
+print(y_test[1])
+
+if service.state == 'Healthy':
+    x_test_json = x_test[:1].to_json(orient='records')
+
+    output = service.run(x_test_json)
+
+    print(output) 
+```
+
+The result is correct:
+
+<img src="/final_images/automl_predict.PNG" width=100% height=100% /> 
 
 ## Screen Recording
-*TODO* Provide a link to a screen recording of the project in action. Remember that the screencast should demonstrate:
-- A working model
-- Demo of the deployed  model
-- Demo of a sample request sent to the endpoint and its response
 
+Check out the following video to get an overview of the whole project and all parts.
 
+[Screencast video](https://youtu.be/hg-IgL61zyU)
+
+## Conclusion
+
+It is possible to train an AutoML VotingEnsemble model with 74% accuracy on the dataset. The paper 
+[Kalwak et al., 2010](https://www.bbmt.org/article/S1083-8791(10)00148-5/fulltext) present the hypothesis that
+increased dosage of CD34+ cells / kg extends overall survival time without simultaneous occurrence of undesirable
+events affecting patients' quality of life. The model explanation confirmed that the parameter CD34+ cells / kg has a very
+big importance in the dataset. Unfortunately it was not possible to receive a good separation of the data 
+regarding the CD34+ cells / kg parameter. This fact results in a 41% TP (True-Positive) value for predicting alive 
+patient as alive. On the other side the most important dataset parameter is relapse. The data separation is very clear and
+results in a TN (True-Negative) value of 90% for predicting a dead patient as dead. This results are a bit frustrating 
+because my goal was to detect parameters that are important for survival and to train a model that performs well on them. 
+In the end I think the dataset is also to small with only 104 rows and only 30% class 1 (alive) patient. A very important
+feature with 70% of class 0 (dead) data results in a model that better predicts class 0.
