@@ -587,7 +587,7 @@ if service.state == 'Healthy':
 
 The result is correct:
 
-<img src="/final_images/automl_predict.PNG" width=100% height=100% /> 
+<img src="/final_images/automl_predict.PNG" width=50% height=50% /> 
 
 ## Screen Recording
 
@@ -606,5 +606,5 @@ regarding the CD34+ cells / kg parameter. This fact results in a 41% TP (True-Po
 patient as alive. On the other side the most important dataset parameter is relapse. The data separation is very clear and
 results in a TN (True-Negative) value of 90% for predicting a dead patient as dead. This results are a bit frustrating 
 because my goal was to detect parameters that are important for survival and to train a model that performs well on them. 
-In the end I think the dataset is also to small with only 104 rows and only 30% class 1 (alive) patient. A very important
+In the end I think the dataset is also to small with only 104 rows and only 30% class 1 (alive) patients. A very important
 feature with 70% of class 0 (dead) data results in a model that better predicts class 0.
