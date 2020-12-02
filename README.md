@@ -594,7 +594,7 @@ print(y_test[1])
 
 The result is correct:
 
-<img src="/final_images/request.PNG" width=50% height=50% /> 
+<img src="/final_images/request.PNG" width=75% height=75% /> 
 
 ## Screen Recording
 
