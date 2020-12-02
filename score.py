@@ -14,7 +14,11 @@ def init():
 
 def run(raw_data):
 
-    data = pd.read_json(raw_data,orient='records')
+    #data = pd.read_json(raw_data,orient='records')
+    #y = model.predict(data)
+
+    data = pd.DataFrame(json.loads(raw_data)['data'])
+
     y = model.predict(data)
 
     return y.tolist()
