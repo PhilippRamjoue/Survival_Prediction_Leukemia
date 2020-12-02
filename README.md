@@ -572,28 +572,35 @@ Checking out the experiment run in which the best model was found it's visible, 
 To test the webservice one possible solution is to run the service with test data directly. Another solution would a API request. In the end, the result is the same:
 
 ```
-df_test = training_data.to_pandas_dataframe()
-y_test=df_test['survival_status']
-x_test=df_test.drop(['survival_status'],axis=1)
+scoring_uri = service.scoring_uri
+
+headers = {'Content-Type':'application/json'}
+
+x_test_json = x_test[:1].to_json(orient='records')
+
+json_content = '{"data":' + x_test_json + '}'
+
+json_content_conv = json.loads(json_content)
+
+test_data = json.dumps(json_content_conv)
+
+response = requests.post(scoring_uri, data=test_data, headers=headers)
+
+print(response.status_code)
+print(response.elapsed)
+print(response.json())
 print(y_test[1])
-
-if service.state == 'Healthy':
-    x_test_json = x_test[:1].to_json(orient='records')
-
-    output = service.run(x_test_json)
-
-    print(output) 
 ```
 
 The result is correct:
 
-<img src="/final_images/automl_predict.PNG" width=50% height=50% /> 
+<img src="/final_images/request.PNG" width=50% height=50% /> 
 
 ## Screen Recording
 
 Check out the following video to get an overview of the whole project and all parts.
 
-[Screencast video](https://youtu.be/hg-IgL61zyU)
+[Screencast video](https://youtu.be/1f4hMJAqGuM)
 
 ## Conclusion
 
@@ -608,3 +615,10 @@ results in a TN (True-Negative) value of 90% for predicting a dead patient as de
 because my goal was to detect parameters that are important for survival and to train a model that performs well on them. 
 In the end I think the dataset is also to small with only 104 rows and only 30% class 1 (alive) patients. A very important
 feature with 70% of class 0 (dead) data results in a model that better predicts class 0.
+
+
+## Future Improvements
+
+Better results can be achieved with a larger data set. I think the model itself is already really good and Ensemble 
+approaches are in general suitable for such classification problems. A performance boost could maybe be achieved with a deep
+neural network.
